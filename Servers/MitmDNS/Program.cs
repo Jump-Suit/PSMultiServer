@@ -9,6 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 using NetworkLibrary.Extension;
+using System.Linq;
 
 public static class MitmDNSServerConfiguration
 {
@@ -187,7 +188,7 @@ class Program
         if (MitmDNSServerConfiguration.PublicIpFallback)
             DNSResolver.ServerIp = InternetProtocolUtils.GetPublicIPAddress();
         else
-            DNSResolver.ServerIp = InternetProtocolUtils.GetLocalIPAddresses().ToString();
+            DNSResolver.ServerIp = InternetProtocolUtils.GetLocalIPAddresses().FirstOrDefault().ToString();
 
         if (Server == null)
             Server = new(Environment.ProcessorCount * 4);

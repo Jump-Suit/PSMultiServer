@@ -70,12 +70,12 @@ namespace WebAPIService.UBISOFT.OnlineConfigService
         {
             { "SandboxUrl",                     @"prudp:/address=lb-rdv-as-prod01.ubisoft.com;port=21221"},
             { "SandboxUrlWS",                   @"ne1-z3-as-rdv06.ubisoft.com:21215"},
-            { "uplay_DownloadServiceUrl",       @"https://secure.ubi.com/UplayServices/UplayFacade/DownloadServicesRESTXML.svc/REST/XML/?url="},
+            { "uplay_DownloadServiceUrl",       @"http://secure.ubi.com/UplayServices/UplayFacade/DownloadServicesRESTXML.svc/REST/XML/?url="},
             { "uplay_DynContentBaseUrl",        @"http://static8.cdn.ubi.com/u/Uplay/"},
             { "uplay_DynContentSecureBaseUrl",  @"http://static8.cdn.ubi.com/"},
             { "uplay_LinkappBaseUrl",           @"http://static8.cdn.ubi.com/u/Uplay/Packages/linkapp/1.1/"},
             { "uplay_PackageBaseUrl",           @"http://static8.cdn.ubi.com/u/Uplay/Packages/1.0.1/"},
-            { "uplay_WebServiceBaseUrl",        @"https://secure.ubi.com/UplayServices/UplayFacade/ProfileServicesFacadeRESTXML.svc/REST/"},
+            { "uplay_WebServiceBaseUrl",        @"http://secure.ubi.com/UplayServices/UplayFacade/ProfileServicesFacadeRESTXML.svc/REST/"},
         };
 
         private readonly static Dictionary<string, string> ACRevelationsPS3Response = new Dictionary<string, string>()
@@ -175,8 +175,11 @@ namespace WebAPIService.UBISOFT.OnlineConfigService
 
         private readonly static Dictionary<string, string> AC2PS3Response = new Dictionary<string, string>()
         {
-            { "SandboxUrlPS3",                  @"prudp:/address=pdc-lb-rdv-prod07.ubisoft.com;port=61129;serviceid=UPxxxx-MYGAME"},
-            { "SandboxUrlWS",                   @"pdc-vm-rdv07.ubisoft.com:61129"},
+            //{ "SandboxUrlPS3",                  @"prudp:/address=pdc-lb-rdv-prod07.ubisoft.com;port=61129;serviceid=UPxxxx-MYGAME"},
+            //{ "SandboxUrlWS",                   @"pdc-vm-rdv07.ubisoft.com:61129"},
+            { "NetworkPlatformServiceId",       @"UP0001-BLUS30364_00"},
+            { "SandboxUrl",                     @"prudp:/address=mdc-mm-rdv57.ubisoft.com;port=23960;serviceid=UP0001-BLUS30364_00"},
+            { "SandboxUrlWS",                   @"mdc-mm-rdv57.ubisoft.com:23960"},
             { "uplay_DownloadServiceUrl",       @"http://wsuplay.ubi.com/UplayServices/UplayFacade/DownloadServicesRESTXML.svc/REST/XML/?url="},
             { "uplay_DynContentBaseUrl",        @"http://static8.cdn.ubi.com/u/Uplay/"},
             { "uplay_DynContentSecureBaseUrl",  @"http://static8.cdn.ubi.com/"},
@@ -227,6 +230,28 @@ namespace WebAPIService.UBISOFT.OnlineConfigService
             { "uplay_WebServiceBaseUrl",        new Tuple<string, string>(@"http://wsuplay.ubi.com/UplayServices/UplayFacade/ProfileServicesFacadeRESTXML.svc/REST/", null)},
         };
 
+
+        private readonly static Dictionary<string, string> IAAPS3Response = new Dictionary<string, string>()
+        {
+            { "SandboxUrl",                     @"prudp:/address=lb-rdv-prod01.ubisoft.com;port=60106;serviceid=UPxxxx-MYGAME"},
+            { "TrackingSandboxURLPS3",          @"prudp:/address=lb-rdv-prod01.ubisoft.com;port=60106;serviceid=UPxxxx-MYGAME"},
+            { "SandboxUrlWS",                   @"pdc-vm-rdv01.ubisoft.com:60106"},
+        };
+
+        private readonly static Dictionary<string, string> JCAvatarTheGamePS3Response = new Dictionary<string, string>()
+        {
+            { "SandboxUrlPS3",                  @"prudp:/address=lb-rdv-prod02.ubisoft.com;port=24250;serviceid=UP0001-BLUS30374_00"},
+            { "SandboxUrlWS",                   @"lb-rdv-prod02.ubisoft.com:24250"},
+            { "TrackingSandboxURLPs3",          @"prudp:/address=lb-rdv-prod02.ubisoft.com;port=24250;serviceid=UP0001-BLUS30374_00"},
+            { "uplay_DownloadServiceUrl",       @"http://wsuplay.ubi.com/UplayServices/UplayFacade/DownloadServicesRESTXML.svc/REST/XML/?url="},
+            { "uplay_DynContentBaseUrl",        @"http://static8.cdn.ubi.com/u/Uplay/"},
+            { "uplay_DynContentSecureBaseUrl",  @"http://static8.cdn.ubi.com/"},
+            { "uplay_LinkappBaseUrl",           @"http://static8.cdn.ubi.com/u/Uplay/Packages/linkapp/1.1/"},
+            { "uplay_MovieBaseUrl",             @"http://static8.cdn.ubi.com/u/Uplay/"},
+            { "uplay_PackageBaseUrl",           @"http://static8.cdn.ubi.com/u/Uplay/Packages/1.5-Share-rc/"},
+            { "uplay_WebServiceBaseUrl",        @"http://wsuplay.ubi.com/UplayServices/UplayFacade/ProfileServicesFacadeRESTXML.svc/REST/"},
+        };
+
         public static string GetOnlineConfigPSN(string onlineConfigID)
         {
             if (string.IsNullOrEmpty(onlineConfigID))
@@ -268,6 +293,16 @@ namespace WebAPIService.UBISOFT.OnlineConfigService
                     break;
                 case "749b17f318b7463cbaa4eb5bc19527e5":
                     foreach (var v in AC2PS3Response)
+                    {
+                        list.Add(new OnlineConfigEntry
+                        {
+                            Name = v.Key,
+                            Values = new[] { v.Value }
+                        });
+                    }
+                    break;
+                case "1d6d2cd10bdc8fb1ed14b04749481873":
+                    foreach (var v in JCAvatarTheGamePS3Response)
                     {
                         list.Add(new OnlineConfigEntry
                         {
@@ -323,6 +358,16 @@ namespace WebAPIService.UBISOFT.OnlineConfigService
                         {
                             Name = v.Key,
                             Values = (v.Value.Item2 != null) ? new[] { v.Value.Item1, v.Value.Item2 } : new[] { v.Value.Item1 }
+                        });
+                    }
+                    break;
+                case "7a5a8edc9e2b42abb12b47d04e531b26":
+                    foreach (var v in IAAPS3Response)
+                    {
+                        list.Add(new OnlineConfigEntry
+                        {
+                            Name = v.Key,
+                            Values = new[] { v.Value }
                         });
                     }
                     break;
