@@ -143,9 +143,9 @@ namespace MultiSocks.Aries.Model
             List<PlusUser> infos = new();
             lock (Users)
             {
-                foreach (var user in Users)
+                foreach (var user in Users.Values.Cast<AriesUser>())
                 {
-                    infos.Add(user.Value.GetInfo());
+                    infos.Add(user.GetInfo());
                 }
             }
             foreach (var info in infos) target.Connection?.SendMessage(info);
