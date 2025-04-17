@@ -1,8 +1,10 @@
 using CustomLogger;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using SSFWServer.Helpers.FileHelper;
+using SSFWServer.Helpers.RegexHelper;
 using System.Text;
-using System.Text.RegularExpressions;
+using System.Text.Json;
 
 namespace SSFWServer.Services
 {
@@ -24,6 +26,13 @@ namespace SSFWServer.Services
             SSFWUpdateMini(filepath + "/mini.json", Encoding.UTF8.GetString(buffer), false);
 
             return buffer;
+        }
+
+        public byte[] HandleRewardServiceInvPOST(byte[] buffer, string directorypath, string filepath, string absoultepath)
+        {
+            Directory.CreateDirectory(directorypath);
+
+            return SSFWRewardServiceInventoryPOST(buffer, directorypath, filepath, absoultepath);
         }
 
         public void HandleRewardServiceTrunksPOST(byte[] buffer, string directorypath, string filepath, string absolutepath, string env, string? userId)
@@ -224,6 +233,158 @@ namespace SSFWServer.Services
             }
         }
 
+        public byte[] SSFWRewardServiceInventoryPOST(byte[] buffer, string directorypath, string filepath, string absolutePath)
+        {
+            //Tracking Inventory
+            const string trackingGuid = "00000000-00000000-00000000-00000001"; // fallback/hardcoded tracking GUID
+
+            // File paths based on the provided format
+            string countsStoreDir = $"{SSFWServerConfiguration.SSFWStaticFolder}/{absolutePath}/";
+            string countsStore = $"{countsStoreDir}/counts.json";
+            string trackingFileDir = $"{SSFWServerConfiguration.SSFWStaticFolder}/{absolutePath}/object/";
+            string trackingFile = $"{trackingFileDir}/{trackingGuid}.json";
+
+            Directory.CreateDirectory(Path.GetDirectoryName(countsStoreDir));
+            Directory.CreateDirectory(Path.GetDirectoryName(trackingFileDir));
+
+            string fixedJsonPayload = GUIDValidator.FixJsonValues(Encoding.UTF8.GetString(buffer));
+            try
+            {
+                using JsonDocument document = JsonDocument.Parse(fixedJsonPayload);
+                JsonElement root = document.RootElement;
+                if (!root.TryGetProperty("rewards", out JsonElement rewardsElement) || rewardsElement.ValueKind != JsonValueKind.Array)
+                {
+                    LoggerAccessor.LogError("[SSFW] - SSFWRewardServiceInventoryPOST: Invalid payload - 'rewards' must be an array.");
+                    return Encoding.UTF8.GetBytes("{\"idList\": [\"00000000-00000000-00000000-00000001\"] }");
+                }
+
+                var rewards = rewardsElement.EnumerateArray();
+                if (!rewards.MoveNext())
+                {
+                    LoggerAccessor.LogError("[SSFW] - SSFWRewardServiceInventoryPOST: Invalid payload - 'rewards' array is empty.");
+                    return Encoding.UTF8.GetBytes("{\"idList\": [\"00000000-00000000-00000000-00000001\"] }");
+                }
+
+                Dictionary<string, int> counts;
+                if (File.Exists(countsStore))
+                {
+                    string countsJson = File.ReadAllText(countsStore);
+                    counts = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, int>>(countsJson) ?? new Dictionary<string, int>();
+                }
+                else
+                {
+                    counts = new Dictionary<string, int>();
+                }
+
+                Dictionary<string, Dictionary<string, object>> existingTrackingData = null;
+                if (File.Exists(trackingFile))
+                {
+                    string existingTrackingJson = File.ReadAllText(trackingFile);
+                    using JsonDocument trackingDoc = JsonDocument.Parse(existingTrackingJson);
+                    JsonElement trackingRoot = trackingDoc.RootElement;
+                    if (trackingRoot.TryGetProperty("rewards", out JsonElement trackingRewardsElement) &&
+                        trackingRewardsElement.ValueKind == JsonValueKind.Object)
+                    {
+                        existingTrackingData = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, Dictionary<string, object>>>(
+                            trackingRewardsElement.GetRawText());
+                    }
+                }
+
+                foreach (JsonElement reward in rewards)
+                {
+                    if (!reward.TryGetProperty("objectId", out JsonElement objectIdElement) ||
+                        objectIdElement.ValueKind != JsonValueKind.String)
+                    {
+                        LoggerAccessor.LogError("[SSFW] - SSFWRewardServiceInventoryPOST: Invalid reward - 'objectId' missing or not a string.");
+                        continue;
+                    }
+
+                    if (objectIdElement.ValueKind != JsonValueKind.String)
+                    {
+                        LoggerAccessor.LogError($"[SSFW] - SSFWRewardServiceInventoryPOST: 'objectId' must be a string, got {objectIdElement.ValueKind}.");
+                        continue;
+                    }
+
+                    string objectId = objectIdElement.GetString();
+
+                    // Update counts
+                    if (counts.ContainsKey(objectId))
+                    {
+                        counts[objectId]++;
+                    }
+                    else
+                    {
+                        counts[objectId] = 1;
+                    }
+
+                    // Check if this is a tracking object (has metadata or matches tracking GUID)
+                    bool hasMetadata = reward.TryGetProperty("_id", out _) ||
+                                      reward.TryGetProperty("scene", out _) ||
+                                      reward.TryGetProperty("boost", out _) ||
+                                      reward.TryGetProperty("game", out _) ||
+                                      reward.TryGetProperty("migrated", out _);
+                    if (hasMetadata || objectId == trackingGuid || objectId != string.Empty)
+                    {
+                        var trackingRewards = existingTrackingData ?? new Dictionary<string, Dictionary<string, object>>();
+                        var metadata = new Dictionary<string, object>();
+
+                        foreach (JsonProperty prop in reward.EnumerateObject())
+                        {
+                            if (prop.Name != "objectId")
+                            {
+                                switch (prop.Value.ValueKind)
+                                {
+                                    case JsonValueKind.String:
+                                        metadata[prop.Name] = prop.Value.GetString();
+                                        break;
+                                    case JsonValueKind.Number:
+                                        metadata[prop.Name] = prop.Value.GetInt32();
+                                        break;
+                                    case JsonValueKind.True:
+                                    case JsonValueKind.False:
+                                        metadata[prop.Name] = prop.Value.GetBoolean();
+                                        break;
+                                    default:
+                                        metadata[prop.Name] = prop.Value.ToString();
+                                        break;
+                                }
+                            }
+                        }
+
+                        trackingRewards[objectId] = metadata;
+
+                        // Write tracking data
+                        var trackingData = new Dictionary<string, object>
+                        {
+                            { "result", 0 },
+                            { "rewards", trackingRewards }
+                        };
+                        string trackingJson = System.Text.Json.JsonSerializer.Serialize(trackingData, new JsonSerializerOptions { WriteIndented = true });
+                        File.WriteAllText(trackingFile, trackingJson);
+#if DEBUG
+                        LoggerAccessor.LogInfo($"[SSFW] - SSFWRewardServiceInventoryPOST: Updated tracking file: {trackingFile}");
+#endif
+                    }
+                }
+
+                string updatedCountsJson = System.Text.Json.JsonSerializer.Serialize(counts, new JsonSerializerOptions { WriteIndented = true });
+                File.WriteAllText(countsStore, updatedCountsJson);
+#if DEBUG
+                LoggerAccessor.LogInfo($"[SSFW] - SSFWRewardServiceInventoryPOST: Updated counts file: {countsStore}");
+#endif
+            }
+            catch (System.Text.Json.JsonException ex)
+            {
+                LoggerAccessor.LogError($"[SSFW] - SSFWRewardServiceInventoryPOST: Error parsing JSON payload: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                LoggerAccessor.LogError($"[SSFW] - SSFWRewardServiceInventoryPOST: Error processing POST request: {ex.Message}");
+            }
+
+            return Encoding.UTF8.GetBytes(@"{ ""idList"": [""00000000-00000000-00000000-00000001""]}");
+        }
+
         public void AddMiniEntry(string uuid, byte invtype, string trunkFilePath, string env, string? userId)
         {
             ProcessTrunkObjectUpdate(trunkFilePath, new Dictionary<string, byte> { { uuid, invtype } }, env, userId, true);
@@ -246,38 +407,48 @@ namespace SSFWServer.Services
 
         private void ProcessTrunkObjectUpdate(string trunkFilePath, Dictionary<string, byte> entries, string env, string? userId, bool add)
         {
-            string? trunkJson = FileHelper.ReadAllText(trunkFilePath, key);
+            string? trunkJsonData = FileHelper.ReadAllText(trunkFilePath, key);
 
-            if (!string.IsNullOrEmpty(trunkJson))
+            if (!string.IsNullOrEmpty(trunkJsonData))
             {
+                string setpartialRequest;
+
                 try
                 {
                     string setPartialDirectory = trunkFilePath.Substring(0, trunkFilePath.Length - 5);
+                    using JsonDocument doc = JsonDocument.Parse(trunkJsonData);
+
                     List<int> indexList = new();
-                    MatchCollection matches = new Regex(@"\""index\"":\s*\""(\d+)\""").Matches(trunkJson);
-                    int i = matches.Count;
-                    int lastIndex = 0;
+                    Dictionary<int, (string, byte)> indexToItem = new();
 
-                    while (i > 0)
+                    foreach (var obj in doc.RootElement.GetProperty("objects").EnumerateArray())
                     {
-                        if (int.TryParse(matches[i - 1].Groups[1].Value, out lastIndex))
+                        if (obj.TryGetProperty("index", out var indexProp) &&
+                            obj.TryGetProperty("objectId", out var idProp) &&
+                            obj.TryGetProperty("type", out var idType) &&
+                            int.TryParse(indexProp.GetString(), out int index))
                         {
-                            indexList.Add(lastIndex);
+                            indexList.Add(index);
+                            string? idPropStr = idProp.GetString();
+                            string? idTypeStr = idType.GetString();
+                            if (!string.IsNullOrEmpty(idTypeStr) && !string.IsNullOrEmpty(idPropStr) && byte.TryParse(idTypeStr, out byte typeOfEntry))
+                                indexToItem[index] = (idPropStr, typeOfEntry);
                         }
-
-                        i--;
                     }
 
-                    if (indexList.Count > 0)
-                        lastIndex = indexList.Max() + 1;
+                    int lastIndex = indexList.Count > 0 ? indexList.Max() + 1 : 0;
 
-                    // Make sure we don't add a given uuid twice (causes inventory errors at boot)
-                    foreach (string key in entries.Keys.Where(key => trunkJson.Contains(key)))
+                    if (add)
                     {
-                        entries.Remove(key);
+                        // Make sure we don't add a given uuid twice (causes inventory errors at boot)
+                        foreach (string key in entries.Keys.Where(key => trunkJsonData.Contains(key)))
+                        {
+                            entries.Remove(key);
+                        }
+                        setpartialRequest = BuildAddSetPartialJson(entries, lastIndex);
                     }
-
-                    string setpartialRequest = BuildSetPartialJson(entries, lastIndex, add);
+                    else
+                        setpartialRequest = BuildDeleteSetPartialJson(entries, indexToItem);
 
                     Directory.CreateDirectory(setPartialDirectory);
 
@@ -292,63 +463,60 @@ namespace SSFWServer.Services
             }
         }
 
-        private string BuildSetPartialJson(Dictionary<string, byte> entries, int index, bool add)
+        private string BuildAddSetPartialJson(Dictionary<string, byte> entries, int startIndex)
         {
             // Create the object to build the JSON structure
-            if (add)
+            var jsonObject = new
             {
-                var jsonObject = new
+                add = new
                 {
-                    add = new
-                    {
-                        objects = new List<object>()
-                    }
-                };
-
-                // Loop through the dictionary and add each item to the objects list
-                foreach (var item in entries)
-                {
-                    jsonObject.add.objects.Add(new
-                    {
-                        objectId = item.Key,
-                        type = item.Value.ToString(),
-                        trunk = "0",
-                        index = index.ToString()
-                    });
-
-                    index++;
+                    objects = new List<object>()
                 }
+            };
 
-                // Serialize the object to JSON string
-                return JsonConvert.SerializeObject(jsonObject);
-            }
-            else
+            // Loop through the dictionary and add each item to the objects list
+            foreach (var item in entries)
             {
-                var jsonObject = new
+                jsonObject.add.objects.Add(new
                 {
-                    delete = new
-                    {
-                        objects = new List<object>()
-                    }
-                };
+                    objectId = item.Key,
+                    type = item.Value.ToString(),
+                    trunk = "0",
+                    index = startIndex.ToString()
+                });
 
-                // Loop through the dictionary and add each item to the objects list
-                foreach (var item in entries)
-                {
-                    jsonObject.delete.objects.Add(new
-                    {
-                        objectId = item.Key,
-                        type = item.Value.ToString(),
-                        trunk = "0",
-                        index = index.ToString()
-                    });
-
-                    index++;
-                }
-
-                // Serialize the object to JSON string
-                return JsonConvert.SerializeObject(jsonObject);
+                startIndex++;
             }
+
+            // Serialize the object to JSON string
+            return JsonConvert.SerializeObject(jsonObject);
+        }
+
+        private string BuildDeleteSetPartialJson(Dictionary<string, byte> entries, Dictionary<int, (string, byte)> indexToItem)
+        {
+            // Create the object to build the JSON structure
+            var jsonObject = new
+            {
+                delete = new
+                {
+                    objects = new List<object>()
+                }
+            };
+
+            // Loop through the dictionary and add each item to the objects list
+            foreach (var item in entries)
+            {
+                jsonObject.delete.objects.Add(new
+                {
+                    objectId = item.Key,
+                    type = item.Value.ToString(),
+                    trunk = "0",
+                    index = indexToItem.Where(x => x.Value.Item2 == item.Value && x.Value.Item1 == item.Key).FirstOrDefault().Key.ToString(),
+                });
+            }
+
+            // Serialize the object to JSON string
+            return JsonConvert.SerializeObject(jsonObject);
         }
     }
 }
