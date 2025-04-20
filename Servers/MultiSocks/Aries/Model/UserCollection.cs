@@ -1,46 +1,32 @@
 using MultiSocks.Aries.Messages;
-using System.Collections.Specialized;
 
 namespace MultiSocks.Aries.Model
 {
     public class UserCollection
     {
-        protected OrderedDictionary Users = new();
+        protected ConcurrentList<AriesUser> Users = new();
 
         public List<AriesUser> GetAll()
         {
-            lock (Users)
-                return Users.Values.Cast<AriesUser>().ToList();
+            return Users.ToList();
         }
 
         public virtual bool AddUser(AriesUser? user, string VERS = "")
         {
-            if (user == null)
+            if (user == null || Users.Contains(user))
                 return false;
 
-            lock (Users)
-            {
-                if (Users.Contains(user.ID))
-                    return false;
-
-                Users.Add(user.ID, user);
-                return true;
-            }
+            Users.Add(user);
+            return true;
         }
 
         public virtual bool AddUserWithRoomMesg(AriesUser? user, string VERS = "")
         {
-            if (user == null)
+            if (user == null || Users.Contains(user))
                 return false;
 
-            lock (Users)
-            {
-                if (Users.Contains(user.ID))
-                    return false;
-
-                Users.Add(user.ID, user);
-                return true;
-            }
+            Users.Add(user);
+            return true;
         }
 
         public virtual bool RemoveUser(AriesUser? user)
@@ -48,14 +34,7 @@ namespace MultiSocks.Aries.Model
             if (user == null)
                 return false;
 
-            lock (Users)
-            {
-                if (!Users.Contains(user.ID))
-                    return false;
-
-                Users.Remove(user.ID);
-                return true;
-            }
+            return Users.Remove(user);
         }
 
         public AriesUser? GetUserByName(string? name)
@@ -63,48 +42,42 @@ namespace MultiSocks.Aries.Model
             if (string.IsNullOrEmpty(name))
                 return null;
 
-            lock (Users)
-                return Users.Values.Cast<AriesUser>().FirstOrDefault(x => x.Username == name);
+            return Users.FirstOrDefault(x => x.Username == name);
         }
 
         public AriesUser? GetUserByPersonaName(string name)
         {
-            lock (Users)
-                return Users.Values.Cast<AriesUser>().FirstOrDefault(x => x.PersonaName == name);
+            return Users.FirstOrDefault(x => x.PersonaName == name);
         }
 
         public int Count()
         {
-            lock (Users)
-                return Users.Count;
+            return Users.Count;
         }
 
         public void Broadcast(AbstractMessage msg)
         {
-            lock (Users)
+            foreach (AriesUser user in Users)
             {
-                foreach (AriesUser user in Users.Values)
+                if (user.Connection == null)
                 {
-                    if (user.Connection == null)
+                    new Thread(() =>
                     {
-                        new Thread(() =>
+                        int retries = 0;
+                        while (retries < 5)
                         {
-                            int retries = 0;
-                            while (retries < 5)
+                            if (user.Connection != null)
                             {
-                                if (user.Connection != null)
-                                {
-                                    user.Connection.SendMessage(msg);
-                                    break;
-                                }
-                                retries++;
-                                Thread.Sleep(500);
+                                user.Connection.SendMessage(msg);
+                                break;
                             }
-                        }).Start();
-                    }
-                    else
-                        user.Connection.SendMessage(msg);
+                            retries++;
+                            Thread.Sleep(500);
+                        }
+                    }).Start();
                 }
+                else
+                    user.Connection.SendMessage(msg);
             }
         }
     }
