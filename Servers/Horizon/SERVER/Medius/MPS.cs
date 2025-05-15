@@ -76,17 +76,6 @@ namespace Horizon.SERVER.Medius
                             break;
                         }
 
-                        /*
-                        // Ensure key is correct
-                        if (!clientCryptKeyPublic.PublicKey.Reverse().SequenceEqual(MediusStarter.Settings.MPSKey.N.ToByteArrayUnsigned()))
-                        {
-                            LoggerAccessor.LogError($"Client {clientChannel.RemoteAddress} attempting to authenticate with invalid key {Encoding.Default.GetString(clientCryptKeyPublic.PublicKey)}");
-                            data.State = ClientState.DISCONNECTED;
-                            await clientChannel.CloseAsync();
-                            break;
-                        }
-                        */
-
                         data.State = ClientState.CONNECT_1;
 
                         // generate new client session key
@@ -360,7 +349,7 @@ namespace Horizon.SERVER.Medius
 
                             if (partyType == 1 && party != null)
                             {
-                                party.MediusWorldID = createGameWithAttrResponse.MediusWorldId;
+                                party.MediusWorldId = createGameWithAttrResponse.MediusWorldId;
                                 await party.PartyCreated();
                                 rClient.Queue(new MediusPartyCreateResponse()
                                 {
@@ -511,39 +500,45 @@ namespace Horizon.SERVER.Medius
                             }
                             else if (partyType == 1 && party != null)
                             {
-                                rClient?.Queue(new MediusPartyJoinByIndexResponse()
+                                if (rClient != null)
                                 {
-                                    SetMaxPlayers = approvedMaxPlayersAppIds.Contains(data.ClientObject.ApplicationId),
-                                    MessageID = new MessageId(msgId),
-                                    StatusCode = MediusCallbackStatus.MediusSuccess,
-                                    PartyHostType = party.PartyHostType,
-                                    ConnectionInfo = new NetConnectionInfo()
+                                    // Join game DME
+                                    await rClient.JoinParty(party, party.MediusWorldId);
+
+                                    rClient?.Queue(new MediusPartyJoinByIndexResponse()
                                     {
-                                        AccessKey = rClient.AccessToken,
-                                        SessionKey = rClient.SessionKey,
-                                        TargetWorldID = party.MediusWorldID,
-                                        ServerKey = joinGameResponse.pubKey,
-                                        AddressList = new NetAddressList()
+                                        SetMaxPlayers = approvedMaxPlayersAppIds.Contains(data.ClientObject.ApplicationId),
+                                        MessageID = new MessageId(msgId),
+                                        StatusCode = MediusCallbackStatus.MediusSuccess,
+                                        PartyHostType = party.PartyHostType,
+                                        ConnectionInfo = new NetConnectionInfo()
                                         {
-                                            AddressList = new NetAddress[Constants.NET_ADDRESS_LIST_COUNT]
-                                                    {
+                                            AccessKey = rClient.AccessToken,
+                                            SessionKey = rClient.SessionKey,
+                                            TargetWorldID = party.MediusWorldId,
+                                            ServerKey = joinGameResponse.pubKey,
+                                            AddressList = new NetAddressList()
+                                            {
+                                                AddressList = new NetAddress[Constants.NET_ADDRESS_LIST_COUNT]
+                                                        {
                                                     new NetAddress() { Address = data.ClientObject.IP.MapToIPv4().ToString(), Port = data.ClientObject.Port, AddressType = NetAddressType.NetAddressTypeExternal},
                                                     new NetAddress() { Address = host.AddressList.First().ToString(), Port = MediusClass.Settings.NATPort, AddressType = NetAddressType.NetAddressTypeNATService },
-                                                    }
+                                                        }
+                                            },
+                                            Type = NetConnectionType.NetConnectionTypeClientServerTCPAuxUDP
                                         },
-                                        Type = NetConnectionType.NetConnectionTypeClientServerTCPAuxUDP
-                                    },
-                                    partyIndex = party.MediusWorldID,
-                                    maxPlayers = party.MaxPlayers
-                                });
+                                        partyIndex = party.MediusWorldId,
+                                        maxPlayers = party.MaxPlayers
+                                    });
+                                }
                             }
-                            else
+                            else if (gameOrPartyId != 0 && game != null)
                             {
-                                if (gameOrPartyId != 0 && game != null)
+                                if (rClient != null)
                                 {
                                     #region P2P
                                     if (game.GameHostType == MGCL_GAME_HOST_TYPE.MGCLGameHostPeerToPeer &&
-                                        game.netAddressList?.AddressList[0].AddressType == NetAddressType.NetAddressTypeSignalAddress && rClient != null)
+                                    game.netAddressList?.AddressList[0].AddressType == NetAddressType.NetAddressTypeSignalAddress)
                                     {
                                         rClient.Queue(new MediusJoinGameResponse()
                                         {
@@ -572,8 +567,7 @@ namespace Horizon.SERVER.Medius
                                     }
                                     else if (game.GameHostType == MGCL_GAME_HOST_TYPE.MGCLGameHostPeerToPeer &&
                                         game.netAddressList?.AddressList[0].AddressType == NetAddressType.NetAddressTypeExternal &&
-                                        game.netAddressList?.AddressList[1].AddressType == NetAddressType.NetAddressTypeInternal && rClient != null
-                                        )
+                                        game.netAddressList?.AddressList[1].AddressType == NetAddressType.NetAddressTypeInternal)
                                     {
                                         rClient.Queue(new MediusJoinGameResponse()
                                         {
@@ -603,8 +597,7 @@ namespace Horizon.SERVER.Medius
 
                                     else if (game.GameHostType == MGCL_GAME_HOST_TYPE.MGCLGameHostPeerToPeer &&
                                         game.netAddressList?.AddressList[0].AddressType == NetAddressType.NetAddressTypeBinaryExternalVport &&
-                                        game.netAddressList?.AddressList[1].AddressType == NetAddressType.NetAddressTypeBinaryInternalVport && rClient != null
-                                        )
+                                        game.netAddressList?.AddressList[1].AddressType == NetAddressType.NetAddressTypeBinaryInternalVport)
                                     {
                                         rClient.Queue(new MediusJoinGameResponse()
                                         {
@@ -645,36 +638,7 @@ namespace Horizon.SERVER.Medius
                                     }
 
                                     #endregion
-                                    else if (rClient != null && rClient.MediusVersion <= 108 && rClient.ApplicationId != 10680 && rClient.ApplicationId != 10681 && rClient.ApplicationId != 10683 && rClient.ApplicationId != 10684)
-                                    {
-                                        // Join game DME
-                                        await rClient.JoinGame(game, joinGameResponse.DmeClientIndex);
-
-                                        rClient.Queue(new MediusJoinGameResponse()
-                                        {
-                                            SetMaxPlayers = approvedMaxPlayersAppIds.Contains(data.ClientObject.ApplicationId),
-                                            MessageID = new MessageId(msgId),
-                                            StatusCode = MediusCallbackStatus.MediusSuccess,
-                                            GameHostType = game.GameHostType,
-                                            ConnectInfo = new NetConnectionInfo()
-                                            {
-                                                AccessKey = joinGameResponse.AccessKey,
-                                                SessionKey = rClient.SessionKey,
-                                                TargetWorldID = game.MediusWorldId,
-                                                ServerKey = joinGameResponse.pubKey,
-                                                AddressList = new NetAddressList()
-                                                {
-                                                    AddressList = new NetAddress[Constants.NET_ADDRESS_LIST_COUNT]
-                                                    {
-                                                    new NetAddress() { Address = data.ClientObject.IP.MapToIPv4().ToString(), Port = data.ClientObject.Port, AddressType = NetAddressType.NetAddressTypeExternal},
-                                                    new NetAddress() { Address = host.AddressList.First().ToString(), Port = MediusClass.Settings.NATPort, AddressType = NetAddressType.NetAddressTypeNATService }
-                                                    }
-                                                },
-                                                Type = NetConnectionType.NetConnectionTypeClientServerTCP
-                                            }
-                                        });
-                                    }
-                                    else if (rClient != null)
+                                    else if (rClient.MediusVersion > 108 && rClient.ApplicationId != 10994 || rClient.ApplicationId == 10680 || rClient.ApplicationId == 10681 || rClient.ApplicationId == 10683 || rClient.ApplicationId == 10684)
                                     {
                                         // Join game DME
                                         await rClient.JoinGame(game, joinGameResponse.DmeClientIndex);
@@ -704,12 +668,41 @@ namespace Horizon.SERVER.Medius
                                             MaxPlayers = game.MaxPlayers
                                         });
                                     }
+                                    else
+                                    {
+                                        // Join game DME
+                                        await rClient.JoinGame(game, joinGameResponse.DmeClientIndex);
 
-                                    // For Legacy Medius v1.50 clients that DO NOT 
-                                    // send a ServerConnectNotificationConnect when creating a game
-                                    if (data.ClientObject.MediusVersion < 109 && data.ClientObject.ApplicationId != 10394)
-                                        await game.OnMediusJoinGameResponse(rClient?.SessionKey);
+                                        rClient.Queue(new MediusJoinGameResponse()
+                                        {
+                                            SetMaxPlayers = approvedMaxPlayersAppIds.Contains(data.ClientObject.ApplicationId),
+                                            MessageID = new MessageId(msgId),
+                                            StatusCode = MediusCallbackStatus.MediusSuccess,
+                                            GameHostType = game.GameHostType,
+                                            ConnectInfo = new NetConnectionInfo()
+                                            {
+                                                AccessKey = joinGameResponse.AccessKey,
+                                                SessionKey = rClient.SessionKey,
+                                                TargetWorldID = game.MediusWorldId,
+                                                ServerKey = joinGameResponse.pubKey,
+                                                AddressList = new NetAddressList()
+                                                {
+                                                    AddressList = new NetAddress[Constants.NET_ADDRESS_LIST_COUNT]
+                                                    {
+                                                    new NetAddress() { Address = data.ClientObject.IP.MapToIPv4().ToString(), Port = data.ClientObject.Port, AddressType = NetAddressType.NetAddressTypeExternal},
+                                                    new NetAddress() { Address = host.AddressList.First().ToString(), Port = MediusClass.Settings.NATPort, AddressType = NetAddressType.NetAddressTypeNATService }
+                                                    }
+                                                },
+                                                Type = NetConnectionType.NetConnectionTypeClientServerTCP
+                                            }
+                                        });
+                                    }
                                 }
+
+                                // For Legacy Medius v1.50 clients that DO NOT 
+                                // send a ServerConnectNotificationConnect when creating a game
+                                if (data.ClientObject.MediusVersion < 109 && data.ClientObject.ApplicationId != 10394)
+                                    await game.OnMediusJoinGameResponse(rClient?.SessionKey);
                             }
                         }
                         else
@@ -856,27 +849,57 @@ namespace Horizon.SERVER.Medius
                     {
                         //Fetch Current Game, and Update it with the new one
                         Game? game = MediusClass.Manager.GetGameByGameId(serverMoveGameWorldOnMeRequest.CurrentMediusWorldID);
-                        if (game?.MediusWorldId != serverMoveGameWorldOnMeRequest.CurrentMediusWorldID)
-                        {
-                            data.MeClientObject?.Queue(new MediusServerMoveGameWorldOnMeResponse()
-                            {
-                                MessageID = serverMoveGameWorldOnMeRequest.MessageID,
-                                Confirmation = MGCL_ERROR_CODE.MGCL_UNSUCCESSFUL,
-                            });
-                        }
-                        else
-                        {
-                            game.MediusWorldId = serverMoveGameWorldOnMeRequest.NewGameMediusWorldID;
-                            game.netAddressList.AddressList[0] = serverMoveGameWorldOnMeRequest.AddressList.AddressList[0];
-                            game.netAddressList.AddressList[1] = serverMoveGameWorldOnMeRequest.AddressList.AddressList[1];
+                        Party? party = MediusClass.Manager.GetPartyByPartyId(serverMoveGameWorldOnMeRequest.CurrentMediusWorldID);
 
-                            data.MeClientObject?.Queue(new MediusServerMoveGameWorldOnMeResponse()
+                        if (game != null)
+                        {
+                            if (game.MediusWorldId != serverMoveGameWorldOnMeRequest.CurrentMediusWorldID)
                             {
-                                MessageID = serverMoveGameWorldOnMeRequest.MessageID,
-                                Confirmation = MGCL_ERROR_CODE.MGCL_SUCCESS,
-                                MediusWorldID = serverMoveGameWorldOnMeRequest.NewGameMediusWorldID
-                            });
+                                data.MeClientObject?.Queue(new MediusServerMoveGameWorldOnMeResponse()
+                                {
+                                    MessageID = serverMoveGameWorldOnMeRequest.MessageID,
+                                    Confirmation = MGCL_ERROR_CODE.MGCL_UNSUCCESSFUL,
+                                });
+                            }
+                            else
+                            {
+                                game.MediusWorldId = serverMoveGameWorldOnMeRequest.NewGameMediusWorldID;
+                                game.netAddressList.AddressList[0] = serverMoveGameWorldOnMeRequest.AddressList.AddressList[0];
+                                game.netAddressList.AddressList[1] = serverMoveGameWorldOnMeRequest.AddressList.AddressList[1];
+
+                                data.MeClientObject?.Queue(new MediusServerMoveGameWorldOnMeResponse()
+                                {
+                                    MessageID = serverMoveGameWorldOnMeRequest.MessageID,
+                                    Confirmation = MGCL_ERROR_CODE.MGCL_SUCCESS,
+                                    MediusWorldID = serverMoveGameWorldOnMeRequest.NewGameMediusWorldID
+                                });
+                            }
                         }
+                        else if (party != null)
+                        {
+                            if (party.MediusWorldId != serverMoveGameWorldOnMeRequest.CurrentMediusWorldID)
+                            {
+                                data.MeClientObject?.Queue(new MediusServerMoveGameWorldOnMeResponse()
+                                {
+                                    MessageID = serverMoveGameWorldOnMeRequest.MessageID,
+                                    Confirmation = MGCL_ERROR_CODE.MGCL_UNSUCCESSFUL,
+                                });
+                            }
+                            else
+                            {
+                                party.MediusWorldId = serverMoveGameWorldOnMeRequest.NewGameMediusWorldID;
+                                party.netAddressList.AddressList[0] = serverMoveGameWorldOnMeRequest.AddressList.AddressList[0];
+                                party.netAddressList.AddressList[1] = serverMoveGameWorldOnMeRequest.AddressList.AddressList[1];
+
+                                data.MeClientObject?.Queue(new MediusServerMoveGameWorldOnMeResponse()
+                                {
+                                    MessageID = serverMoveGameWorldOnMeRequest.MessageID,
+                                    Confirmation = MGCL_ERROR_CODE.MGCL_SUCCESS,
+                                    MediusWorldID = serverMoveGameWorldOnMeRequest.NewGameMediusWorldID
+                                });
+                            }
+                        }
+
                         break;
                     }
                 #endregion
@@ -887,6 +910,8 @@ namespace Horizon.SERVER.Medius
                     {
                         if (data.MeClientObject?.CurrentGame != null)
                             await data.MeClientObject.CurrentGame.OnWorldReportOnMe(serverWorldReportOnMe);
+                        else if (data.MeClientObject?.CurrentParty != null)
+                            await data.MeClientObject.CurrentParty.OnWorldReportOnMe(serverWorldReportOnMe);
                         break;
                     }
 
@@ -900,7 +925,7 @@ namespace Horizon.SERVER.Medius
                     {
                         if (data.MeClientObject == null) // Happens when the game creation fails.
                         {
-                            LoggerAccessor.LogWarn("[MLS] - Client Object: {data.ClientObject} called MediusServerEndGameOnMeRequest without a Me Client Object, ignoring.");
+                            LoggerAccessor.LogWarn("[MPS] - Client Object: {data.ClientObject} called MediusServerEndGameOnMeRequest without a Me Client Object, ignoring.");
                             break;
                         }
 
@@ -951,17 +976,15 @@ namespace Horizon.SERVER.Medius
                 #region MediusServerConnectNotification
                 case MediusServerConnectNotification connectNotification:
                     {
-                        if (data.ClientObject != null && MediusClass.Manager.GetGameByMediusWorldId((data.ClientObject).SessionKey ?? string.Empty, (int)connectNotification.MediusWorldUID) != null)
+                        if (data.ClientObject != null)
                         {
-                            Game? conn = MediusClass.Manager.GetGameByMediusWorldId(data.ClientObject.SessionKey ?? string.Empty, (int)connectNotification.MediusWorldUID);
-                            if (conn != null)
-                                await conn.OnMediusServerConnectNotification(connectNotification);
-                        }
-                        else if (data.ClientObject != null)
-                        {
-                            Party? conn = MediusClass.Manager.GetPartyByMediusWorldId(data.ClientObject.SessionKey ?? string.Empty, (int)connectNotification.MediusWorldUID);
-                            if (conn != null)
-                                await conn.OnMediusServerConnectNotification(connectNotification);
+                            Game? gameConn = MediusClass.Manager.GetGameByMediusWorldId(data.ClientObject.SessionKey ?? string.Empty, connectNotification.MediusWorldUID);
+                            Party? partyConn = MediusClass.Manager.GetPartyByMediusWorldId(data.ClientObject.SessionKey ?? string.Empty, connectNotification.MediusWorldUID);
+
+                            if (gameConn != null)
+                                await gameConn.OnMediusServerConnectNotification(connectNotification);
+                            else if (partyConn != null)
+                                await partyConn.OnMediusServerConnectNotification(connectNotification);
                         }
 
                         //MediusServerConnectNotification -  sent Notify msg to MUM
@@ -1070,7 +1093,7 @@ namespace Horizon.SERVER.Medius
             {
                 /* Why this exists? Some games register their own DME servers, not a problem.
                  * But in some rare cases (Ratchet UYA Beta Trial/Press) the server is SO OLD that is requires it's own packet format.
-                   This option allows us to return only our "modern" server, to save of reverse-engineering efforts. */
+                   This option allows us to return only our "modern" server, to save on reverse-engineering efforts ;). */
                 if (appId == 10680 || appId == 10681)
                     return _scertHandler?.Group?
                         .Select(x => _channelDatas[x.Id.AsLongText()]?.ClientObject)
@@ -1085,7 +1108,7 @@ namespace Horizon.SERVER.Medius
             }
             catch (Exception e)
             {
-                LoggerAccessor.LogError("No DME Game Server assigned to this AppId\n", e);
+                LoggerAccessor.LogError($"[MPS] - No DME Game Server assigned to this AppId. (Exception:{e})");
             }
 
             return null;

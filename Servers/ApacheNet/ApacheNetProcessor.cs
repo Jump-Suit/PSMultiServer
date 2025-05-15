@@ -331,24 +331,33 @@ namespace ApacheNet
                     {
                         if (!string.IsNullOrEmpty(rule) && rule.StartsWith("Redirect") && rule.Length >= 9) // Redirect + whitespace is minimum 9 in length.
                         {
-                            string RouteRule = rule[8..];
+                            string RouteRule = rule.ChopOffBefore("Redirect");
 
                             if (RouteRule.StartsWith("Match "))
                             {
 #if NET7_0_OR_GREATER
-                                    Match match = ApacheMatchRegex().Match(RouteRule);
+                                Match match = ApacheMatchRegex().Match(RouteRule);
 #else
                                 Match match = new Regex(@"Match (\d{3}) (\S+) (\S+)$").Match(RouteRule);
 #endif
-                                if (match.Success && match.Groups.Count == 3)
+                                if (match.Success && match.Groups.Count >= 3)
                                 {
                                     // Compare the regex rule against the test URL
                                     if (Regex.IsMatch(absolutepath, match.Groups[2].Value))
                                     {
-                                        statusCode = (HttpStatusCode)int.Parse(match.Groups[1].Value);
-                                        response.Headers.Add("Location", match.Groups[3].Value);
-                                        response.StatusCode = (int)statusCode;
-                                        sent = await response.Send();
+                                        HttpStatusCode extractedStatusCode = (HttpStatusCode)int.Parse(match.Groups[1].Value);
+                                        if (extractedStatusCode == HttpStatusCode.OK)
+                                        {
+                                            absolutepath = match.Groups[3].Value;
+                                            fulluripath = absolutepath + HTTPProcessor.ProcessQueryString(fullurl, true);
+                                        }
+                                        else
+                                        {
+                                            statusCode = extractedStatusCode;
+                                            response.Headers.Add("Location", match.Groups[3].Value);
+                                            response.StatusCode = (int)statusCode;
+                                            sent = await response.Send();
+                                        }
                                     }
                                 }
                             }
@@ -366,13 +375,42 @@ namespace ApacheNet
                             }
                             else if (RouteRule.StartsWith(' '))
                             {
-                                string[] parts = RouteRule[1..].Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                                RouteRule = RouteRule[1..];
+                                string[] parts = RouteRule.Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
 
-                                if (parts.Length == 3 && (parts[1] == "/" || parts[1] == absolutepath))
+                                if (parts.Length >= 4 && "Match".Equals(parts[0]) && int.TryParse(parts[1], out _))
+                                {
+#if NET7_0_OR_GREATER
+                                    Match match = ApacheMatchRegex().Match(RouteRule);
+#else
+                                    Match match = new Regex(@"Match (\d{3}) (\S+) (\S+)$").Match(RouteRule);
+#endif
+                                    if (match.Success && match.Groups.Count >= 3)
+                                    {
+                                        // Compare the regex rule against the test URL
+                                        if (Regex.IsMatch(absolutepath, match.Groups[2].Value))
+                                        {
+                                            HttpStatusCode extractedStatusCode = (HttpStatusCode)int.Parse(match.Groups[1].Value);
+                                            if (extractedStatusCode == HttpStatusCode.OK)
+                                            {
+                                                absolutepath = match.Groups[3].Value;
+                                                fulluripath = absolutepath + HTTPProcessor.ProcessQueryString(fullurl, true);
+                                            }
+                                            else
+                                            {
+                                                statusCode = extractedStatusCode;
+                                                response.Headers.Add("Location", match.Groups[3].Value);
+                                                response.StatusCode = (int)statusCode;
+                                                sent = await response.Send();
+                                            }
+                                        }
+                                    }
+                                }
+                                else if (parts.Length == 3 && (parts[1] == "/" || parts[1] == absolutepath))
                                 {
                                     // Check if the input string contains an HTTP method
 #if NET7_0_OR_GREATER
-                                        if (HttpMethodRegex().Match(parts[0]).Success && request.Method.ToString() == parts[0])
+                                    if (HttpMethodRegex().Match(parts[0]).Success && request.Method.ToString() == parts[0])
 #else
                                     if (new Regex(@"^(GET|POST|PUT|DELETE|HEAD|OPTIONS|PATCH)").Match(parts[0]).Success && request.Method.ToString() == parts[0])
 #endif
@@ -384,7 +422,7 @@ namespace ApacheNet
                                     }
                                     // Check if the input string contains a status code
 #if NET7_0_OR_GREATER
-                                        else if (HttpStatusCodeRegex().Match(parts[0]).Success && int.TryParse(parts[0], out int statuscode))
+                                    else if (HttpStatusCodeRegex().Match(parts[0]).Success && int.TryParse(parts[0], out int statuscode))
 #else
                                     else if (new Regex(@"\\b\\d{3}\\b").Match(parts[0]).Success && int.TryParse(parts[0], out int statuscode))
 #endif
@@ -394,7 +432,7 @@ namespace ApacheNet
                                         response.StatusCode = (int)statusCode;
                                         sent = await response.Send();
                                     }
-                                    else if (parts[1] == "permanent")
+                                    else if ("permanent".Equals(parts[0], StringComparison.InvariantCultureIgnoreCase))
                                     {
                                         statusCode = HttpStatusCode.PermanentRedirect;
                                         response.Headers.Add("Location", parts[2]);
@@ -475,7 +513,7 @@ namespace ApacheNet
 
                                     if (indexFile.EndsWith(".php") && Directory.Exists(ApacheNetServerConfiguration.PHPStaticFolder))
                                     {
-                                        var CollectPHP = PHP.ProcessPHPPage(ApacheNetServerConfiguration.HTTPStaticFolder + $"/{indexFile}", ApacheNetServerConfiguration.PHPStaticFolder, ApacheNetServerConfiguration.PHPVersion, ctx);
+                                        var CollectPHP = PHP.ProcessPHPPage(ApacheNetServerConfiguration.HTTPStaticFolder + $"/{indexFile}", ApacheNetServerConfiguration.PHPStaticFolder, ApacheNetServerConfiguration.PHPVersion, ctx, secure);
                                         statusCode = HttpStatusCode.OK;
                                         if (CollectPHP.Item2 != null)
                                         {
@@ -501,7 +539,7 @@ namespace ApacheNet
                                             HTTPProcessor.GetMimeType(Path.GetExtension(ApacheNetServerConfiguration.HTTPStaticFolder + $"/{indexFile}"), ApacheNetServerConfiguration.MimeTypes ?? HTTPProcessor._mimeTypes), noCompressCacheControl);
                                     else
                                     {
-                                        Stream stream = await FileSystemUtils.TryOpen(ApacheNetServerConfiguration.HTTPStaticFolder + $"/{indexFile}");
+                                        FileStream stream = await FileSystemUtils.TryOpen(ApacheNetServerConfiguration.HTTPStaticFolder + $"/{indexFile}");
 
                                         if (stream == null)
                                         {
@@ -856,9 +894,9 @@ namespace ApacheNet
                                 string? res = null;
                                 JUGGERNAUTClass juggernaut = new(request.Method.ToString(), absolutepath);
                                 if (request.ContentLength > 0)
-                                    res = juggernaut.ProcessRequest(request.Query.Elements.ToDictionary(), apiRootPath, request.DataAsBytes, request.ContentType);
+                                    res = juggernaut.ProcessRequest(HTTPProcessor.GetQueryParameters(fullurl), apiRootPath, request.DataAsBytes, request.ContentType);
                                 else
-                                    res = juggernaut.ProcessRequest(request.Query.Elements.ToDictionary(), apiRootPath);
+                                    res = juggernaut.ProcessRequest(HTTPProcessor.GetQueryParameters(fullurl), apiRootPath);
 
                                 if (res == null)
                                     statusCode = HttpStatusCode.InternalServerError;
@@ -919,7 +957,7 @@ namespace ApacheNet
                             {
                                 LoggerAccessor.LogInfo($"[{loggerprefix}] - {clientip}:{clientport} Requested a PREMIUMAGENCY method : {absolutepath}");
 
-                                string? res = new PREMIUMAGENCYClass(request.Method.ToString(), absolutepath, apiRootPath, fullurl).ProcessRequest(request.DataAsBytes, request.ContentType);
+                                string? res = new PREMIUMAGENCYClass(request.Method.ToString(), absolutepath, apiRootPath, fulluripath).ProcessRequest(request.DataAsBytes, request.ContentType);
                                 if (string.IsNullOrEmpty(res))
                                 {
                                     response.ContentType = "text/plain";
@@ -1653,7 +1691,7 @@ namespace ApacheNet
                                                     response.Headers.Add("Location", $"{(secure ? "https" : "http")}://{Host}{absolutepath}/{HTTPProcessor.ProcessQueryString(fullurl, true)}");
                                                     response.StatusCode = (int)statusCode;
                                                     response.ContentType = "text/html; charset=iso-8859-1";
-                                                    if (!string.IsNullOrEmpty(encoding))
+                                                    if (ApacheNetServerConfiguration.EnableHTTPCompression && !noCompressCacheControl && !string.IsNullOrEmpty(encoding))
                                                     {
                                                         if (encoding.Contains("zstd"))
                                                         {
@@ -1689,7 +1727,7 @@ namespace ApacheNet
                                                     response.ContentType = isHtmlCompatible ? "text/html" : "application/json" + ";charset=utf-8";
                                                     byte[] reportOutputBytes = Encoding.UTF8.GetBytes(await FileStructureFormater.GetFileStructureAsync(endsWithSlash ? filePath[..^1] : filePath, $"{(secure ? "https" : "http")}://{Host}:{ServerPort}{(endsWithSlash ? absolutepath[..^1] : absolutepath)}",
                                                         ServerPort, isHtmlCompatible, ApacheNetServerConfiguration.NestedDirectoryReporting, request.RetrieveQueryValue("properties") == "on", ApacheNetServerConfiguration.MimeTypes ?? HTTPProcessor._mimeTypes));
-                                                    if (!string.IsNullOrEmpty(encoding))
+                                                    if (ApacheNetServerConfiguration.EnableHTTPCompression && !noCompressCacheControl && !string.IsNullOrEmpty(encoding))
                                                     {
                                                         if (encoding.Contains("zstd"))
                                                         {
@@ -1750,7 +1788,7 @@ namespace ApacheNet
 
                                                             if (indexFile.EndsWith(".php") && Directory.Exists(ApacheNetServerConfiguration.PHPStaticFolder))
                                                             {
-                                                                var CollectPHP = PHP.ProcessPHPPage(filePath + $"/{indexFile}", ApacheNetServerConfiguration.PHPStaticFolder, ApacheNetServerConfiguration.PHPVersion, ctx);
+                                                                var CollectPHP = PHP.ProcessPHPPage(filePath + $"/{indexFile}", ApacheNetServerConfiguration.PHPStaticFolder, ApacheNetServerConfiguration.PHPVersion, ctx, secure);
                                                                 statusCode = HttpStatusCode.OK;
                                                                 if (CollectPHP.Item2 != null)
                                                                 {
@@ -1854,7 +1892,7 @@ namespace ApacheNet
                                             }
                                             else if (absolutepath.EndsWith(".php", StringComparison.InvariantCultureIgnoreCase) && Directory.Exists(ApacheNetServerConfiguration.PHPStaticFolder) && File.Exists(filePath))
                                             {
-                                                var CollectPHP = PHP.ProcessPHPPage(filePath, ApacheNetServerConfiguration.PHPStaticFolder, ApacheNetServerConfiguration.PHPVersion, ctx);
+                                                var CollectPHP = PHP.ProcessPHPPage(filePath, ApacheNetServerConfiguration.PHPStaticFolder, ApacheNetServerConfiguration.PHPVersion, ctx, secure);
                                                 statusCode = HttpStatusCode.OK;
                                                 if (CollectPHP.Item2 != null)
                                                 {
@@ -1930,15 +1968,67 @@ namespace ApacheNet
 
                                                 if (ApacheNetServerConfiguration.NotFoundWebArchive && !string.IsNullOrEmpty(Host) && !Host.Equals("web.archive.org") && !Host.Equals("archive.org"))
                                                 {
-                                                    WebArchiveRequest archiveReq = new($"{(secure ? "https" : "http")}://{Host}" + fullurl);
+                                                    WebArchiveRequest archiveReq = new($"{(secure ? "https" : "http")}://{Host}:{ServerPort}" + fulluripath);
                                                     if (archiveReq.Archived)
                                                     {
-                                                        response.ChunkedTransfer = false;
+                                                        const string archivedSourceHeaderKey = "x-archive-src";
+                                                        byte[] archiveToolbarPayload = Encoding.UTF8.GetBytes("<!-- END WAYBACK TOOLBAR INSERT -->\n ");
+
                                                         ArchiveOrgProcessed = true;
-                                                        statusCode = HttpStatusCode.PermanentRedirect;
-                                                        response.Headers.Add("Location", archiveReq.ArchivedURL);
+                                                        statusCode = HttpStatusCode.OK;
+                                                        ctx.Response.Headers.Add("Date", DateTime.Now.ToString("r"));
+                                                        var archivedData = HTTPProcessor.RequestFullURLGET(archiveReq.ArchivedURL);
+                                                        if (archivedData.headers.ContainsKey(archivedSourceHeaderKey))
+                                                            response.Headers.Add(archivedSourceHeaderKey, "https://archive.org/download/" + archivedData.headers[archivedSourceHeaderKey]);
+                                                        if (archivedData.headers.ContainsKey("Content-Type"))
+                                                            response.ContentType = archivedData.headers["Content-Type"];
+                                                        else
+                                                            response.ContentType = HTTPProcessor.GetMimeType(Path.GetExtension(filePath), ApacheNetServerConfiguration.MimeTypes ?? HTTPProcessor._mimeTypes);
                                                         response.StatusCode = (int)statusCode;
-                                                        sent = await response.Send();
+                                                        int archiveToolbarPos = ByteUtils.FindBytePattern(archivedData.data, archiveToolbarPayload);
+                                                        int archiveFooterPos = ByteUtils.FindBytePattern(archivedData.data, Encoding.UTF8.GetBytes("<!--\n     FILE ARCHIVED ON "));
+                                                        byte[] rawDataPayload;
+                                                        if (archiveToolbarPos != -1 && archiveFooterPos != -1 && archiveToolbarPos < archiveFooterPos)
+                                                        {
+                                                            // Calculate start of content: after the toolbar marker
+                                                            int contentStart = archiveToolbarPos + archiveToolbarPayload.Length;
+
+                                                            // Calculate length of content between markers
+                                                            int contentLength = archiveFooterPos - contentStart;
+
+                                                            // Copy that range into new byte array
+                                                            rawDataPayload = new byte[contentLength];
+                                                            Array.Copy(archivedData.data, contentStart, rawDataPayload, 0, contentLength);
+                                                        }
+                                                        else
+                                                            rawDataPayload = archivedData.data;
+                                                        if (ApacheNetServerConfiguration.EnableHTTPCompression && !noCompressCacheControl && !string.IsNullOrEmpty(encoding) && rawDataPayload.Length <= LocalFileStreamHelper.compressionSizeLimit)
+                                                        {
+                                                            if (encoding.Contains("zstd"))
+                                                            {
+                                                                ctx.Response.Headers.Add("Content-Encoding", "zstd");
+                                                                rawDataPayload = HTTPProcessor.CompressZstd(rawDataPayload);
+                                                            }
+                                                            else if (encoding.Contains("br"))
+                                                            {
+                                                                ctx.Response.Headers.Add("Content-Encoding", "br");
+                                                                rawDataPayload = HTTPProcessor.CompressBrotli(rawDataPayload);
+                                                            }
+                                                            else if (encoding.Contains("gzip"))
+                                                            {
+                                                                ctx.Response.Headers.Add("Content-Encoding", "gzip");
+                                                                rawDataPayload = HTTPProcessor.CompressGzip(rawDataPayload);
+                                                            }
+                                                            else if (encoding.Contains("deflate"))
+                                                            {
+                                                                ctx.Response.Headers.Add("Content-Encoding", "deflate");
+                                                                rawDataPayload = HTTPProcessor.Inflate(rawDataPayload);
+                                                            }
+                                                        }
+                                                        if (response.ChunkedTransfer)
+                                                            sent = await response.SendChunk(rawDataPayload, true);
+                                                        else
+                                                            sent = await response.Send(rawDataPayload);
                                                     }
                                                 }
 
@@ -2175,7 +2265,7 @@ namespace ApacheNet
                                                     response.Headers.Add("Location", $"{(secure ? "https" : "http")}://{Host}{absolutepath}/{HTTPProcessor.ProcessQueryString(fullurl, true)}");
                                                     response.StatusCode = (int)statusCode;
                                                     response.ContentType = "text/html; charset=iso-8859-1";
-                                                    if (!string.IsNullOrEmpty(encoding))
+                                                    if (ApacheNetServerConfiguration.EnableHTTPCompression && !noCompressCacheControl && !string.IsNullOrEmpty(encoding))
                                                     {
                                                         if (encoding.Contains("zstd"))
                                                         {
@@ -2211,7 +2301,7 @@ namespace ApacheNet
                                                     response.ContentType = isHtmlCompatible ? "text/html" : "application/json" + ";charset=utf-8";
                                                     byte[] reportOutputBytes = Encoding.UTF8.GetBytes(await FileStructureFormater.GetFileStructureAsync(endsWithSlash ? filePath[..^1] : filePath, $"{(secure ? "https" : "http")}://{Host}:{ServerPort}{(endsWithSlash ? absolutepath[..^1] : absolutepath)}",
                                                         ServerPort, isHtmlCompatible, ApacheNetServerConfiguration.NestedDirectoryReporting, request.RetrieveQueryValue("properties") == "on", ApacheNetServerConfiguration.MimeTypes ?? HTTPProcessor._mimeTypes));
-                                                    if (!string.IsNullOrEmpty(encoding))
+                                                    if (ApacheNetServerConfiguration.EnableHTTPCompression && !noCompressCacheControl && !string.IsNullOrEmpty(encoding))
                                                     {
                                                         if (encoding.Contains("zstd"))
                                                         {
@@ -2272,7 +2362,7 @@ namespace ApacheNet
 
                                                             if (indexFile.EndsWith(".php") && Directory.Exists(ApacheNetServerConfiguration.PHPStaticFolder))
                                                             {
-                                                                var CollectPHP = PHP.ProcessPHPPage(filePath + $"/{indexFile}", ApacheNetServerConfiguration.PHPStaticFolder, ApacheNetServerConfiguration.PHPVersion, ctx);
+                                                                var CollectPHP = PHP.ProcessPHPPage(filePath + $"/{indexFile}", ApacheNetServerConfiguration.PHPStaticFolder, ApacheNetServerConfiguration.PHPVersion, ctx, secure);
                                                                 statusCode = HttpStatusCode.OK;
                                                                 if (CollectPHP.Item2 != null)
                                                                 {
@@ -2376,7 +2466,7 @@ namespace ApacheNet
                                             }
                                             else if (absolutepath.EndsWith(".php", StringComparison.InvariantCultureIgnoreCase) && Directory.Exists(ApacheNetServerConfiguration.PHPStaticFolder) && File.Exists(filePath))
                                             {
-                                                (byte[]?, string[][]) CollectPHP = PHP.ProcessPHPPage(filePath, ApacheNetServerConfiguration.PHPStaticFolder, ApacheNetServerConfiguration.PHPVersion, ctx);
+                                                (byte[]?, string[][]) CollectPHP = PHP.ProcessPHPPage(filePath, ApacheNetServerConfiguration.PHPStaticFolder, ApacheNetServerConfiguration.PHPVersion, ctx, secure);
                                                 statusCode = HttpStatusCode.OK;
                                                 if (CollectPHP.Item2 != null)
                                                 {

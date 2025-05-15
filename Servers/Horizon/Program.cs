@@ -10,6 +10,9 @@ using System.Reflection;
 using Horizon.HTTPSERVICE;
 using Horizon.MUM;
 using NetworkLibrary.Extension;
+using NetworkLibrary.SNMP;
+using NetworkLibrary;
+using Microsoft.Extensions.Logging;
 
 public static class HorizonServerConfiguration
 {
@@ -30,7 +33,7 @@ public static class HorizonServerConfiguration
     public static string? MUISConfig { get; set; } = $"{Directory.GetCurrentDirectory()}/static/muis.json";
     public static string? BWPSConfig { get; set; } = $"{Directory.GetCurrentDirectory()}/static/bwps.json";
     public static string? NATConfig { get; set; } = $"{Directory.GetCurrentDirectory()}/static/nat.json";
-    public static string MediusAPIKey { get; set; } = NetworkLibrary.Crypto.WebCrypto.GenerateRandomBase64KeyAsync().Result;
+    public static string MediusAPIKey { get; set; } = WebAPIService.WebCrypto.WebCryptoClass.GenerateRandomBase64KeyAsync().Result;
     public static string SSFWUrl { get; set; } = $"http://{(InternetProtocolUtils.TryGetServerIP(out _).Result ? InternetProtocolUtils.GetPublicIPAddress() : InternetProtocolUtils.GetLocalIPAddresses().First().ToString())}:8080";
     public static string[]? HTTPSDNSList { get; set; }
 
@@ -158,6 +161,7 @@ class Program
     private static string configDir = Directory.GetCurrentDirectory() + "/static/";
     private static string configPath = configDir + "horizon.json";
     private static string configNetworkLibraryPath = configDir + "NetworkLibrary.json";
+    private static SnmpTrapSender? trapSender = null;
     private static ConcurrentBag<CrudServerHandler>? HTTPBag;
     private static MumServerHandler? MUMServer;
 
@@ -263,7 +267,49 @@ class Program
 
         GeoIP.Initialize();
 
-        NetworkLibrary.NetworkLibraryConfiguration.RefreshVariables(configNetworkLibraryPath);
+        NetworkLibraryConfiguration.RefreshVariables(configNetworkLibraryPath);
+
+        if (NetworkLibraryConfiguration.EnableSNMPReports)
+        {
+            trapSender = new SnmpTrapSender(NetworkLibraryConfiguration.SNMPHashAlgorithm.Name, NetworkLibraryConfiguration.SNMPTrapHost, NetworkLibraryConfiguration.SNMPUserName,
+                    NetworkLibraryConfiguration.SNMPAuthPassword, NetworkLibraryConfiguration.SNMPPrivatePassword,
+                    NetworkLibraryConfiguration.SNMPEnterpriseOid);
+
+            if (trapSender.report != null)
+            {
+                LoggerAccessor.RegisterPostLogAction(LogLevel.Information, (msg, args) =>
+                {
+                    if (NetworkLibraryConfiguration.EnableSNMPReports)
+                        trapSender!.SendInfo(msg);
+                });
+
+                LoggerAccessor.RegisterPostLogAction(LogLevel.Warning, (msg, args) =>
+                {
+                    if (NetworkLibraryConfiguration.EnableSNMPReports)
+                        trapSender!.SendWarn(msg);
+                });
+
+                LoggerAccessor.RegisterPostLogAction(LogLevel.Error, (msg, args) =>
+                {
+                    if (NetworkLibraryConfiguration.EnableSNMPReports)
+                        trapSender!.SendCrit(msg);
+                });
+
+                LoggerAccessor.RegisterPostLogAction(LogLevel.Critical, (msg, args) =>
+                {
+                    if (NetworkLibraryConfiguration.EnableSNMPReports)
+                        trapSender!.SendCrit(msg);
+                });
+#if DEBUG
+                LoggerAccessor.RegisterPostLogAction(LogLevel.Debug, (msg, args) =>
+                {
+                    if (NetworkLibraryConfiguration.EnableSNMPReports)
+                        trapSender!.SendInfo(msg);
+                });
+#endif
+            }
+        }
+
         HorizonServerConfiguration.RefreshVariables(configPath);
 
         StartOrUpdateServer();

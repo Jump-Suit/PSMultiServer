@@ -8,7 +8,9 @@ using System.Runtime;
 using System.Runtime.InteropServices;
 using System.Text.Json.Nodes;
 using System.Text.Json;
-using NetworkLibrary.Extension;
+using NetworkLibrary.SNMP;
+using NetworkLibrary;
+using Microsoft.Extensions.Logging;
 
 public static class MultiSpyServerConfiguration
 {
@@ -4754,18 +4756,21 @@ public static class MultiSpyServerConfiguration
 
         try
         {
-            // Parse the JSON configuration
-            JsonElement config = JsonDocument.Parse(File.ReadAllText(configPath)).RootElement;
+			// Parse the JSON configuration
+			using (var doc = JsonDocument.Parse(File.ReadAllText(configPath)))
+			{
+                JsonElement config = doc.RootElement;
 
-            EnableLogin = GetValueOrDefault(config, "enable_login", EnableLogin);
-            EnablePeerChat = GetValueOrDefault(config, "enable_peer_chat", EnablePeerChat);
-            EnableNatNeg = GetValueOrDefault(config, "enable_natneg", EnableNatNeg);
-            EnableCdKey = GetValueOrDefault(config, "enable_cdkey", EnableCdKey);
-            EnableMaster = GetValueOrDefault(config, "enable_master", EnableMaster);
-            EnableList = GetValueOrDefault(config, "enable_list", EnableList);
-            DatabasePath = GetValueOrDefault(config, "database_path", DatabasePath);
-            ChatServerPath = GetValueOrDefault(config, "chat_server_path", ChatServerPath);
-            GamesKey = GetValueOrDefault(config, "games_key", GamesKey);
+                EnableLogin = GetValueOrDefault(config, "enable_login", EnableLogin);
+                EnablePeerChat = GetValueOrDefault(config, "enable_peer_chat", EnablePeerChat);
+                EnableNatNeg = GetValueOrDefault(config, "enable_natneg", EnableNatNeg);
+                EnableCdKey = GetValueOrDefault(config, "enable_cdkey", EnableCdKey);
+                EnableMaster = GetValueOrDefault(config, "enable_master", EnableMaster);
+                EnableList = GetValueOrDefault(config, "enable_list", EnableList);
+                DatabasePath = GetValueOrDefault(config, "database_path", DatabasePath);
+                ChatServerPath = GetValueOrDefault(config, "chat_server_path", ChatServerPath);
+                GamesKey = GetValueOrDefault(config, "games_key", GamesKey);
+            }
         }
         catch (Exception ex)
         {
@@ -4821,6 +4826,7 @@ class Program
     private static string configPath = configDir + "multispy.json";
     private static string configNetworkLibraryPath = configDir + "NetworkLibrary.json";
     private static IPAddress bindAddr = IPAddress.Any;
+    private static SnmpTrapSender? trapSender = null;
     private static LoginServer? serverLogin = null;
     private static CDKeyServer? serverCdKey = null;
     private static ServerListReport? serverListReport = null;
@@ -4911,7 +4917,49 @@ class Program
 
         GeoIP.Initialize();
 
-        NetworkLibrary.NetworkLibraryConfiguration.RefreshVariables(configNetworkLibraryPath);
+        NetworkLibraryConfiguration.RefreshVariables(configNetworkLibraryPath);
+
+        if (NetworkLibraryConfiguration.EnableSNMPReports)
+        {
+            trapSender = new SnmpTrapSender(NetworkLibraryConfiguration.SNMPHashAlgorithm.Name, NetworkLibraryConfiguration.SNMPTrapHost, NetworkLibraryConfiguration.SNMPUserName,
+                    NetworkLibraryConfiguration.SNMPAuthPassword, NetworkLibraryConfiguration.SNMPPrivatePassword,
+                    NetworkLibraryConfiguration.SNMPEnterpriseOid);
+
+            if (trapSender.report != null)
+            {
+                LoggerAccessor.RegisterPostLogAction(LogLevel.Information, (msg, args) =>
+                {
+                    if (NetworkLibraryConfiguration.EnableSNMPReports)
+                        trapSender!.SendInfo(msg);
+                });
+
+                LoggerAccessor.RegisterPostLogAction(LogLevel.Warning, (msg, args) =>
+                {
+                    if (NetworkLibraryConfiguration.EnableSNMPReports)
+                        trapSender!.SendWarn(msg);
+                });
+
+                LoggerAccessor.RegisterPostLogAction(LogLevel.Error, (msg, args) =>
+                {
+                    if (NetworkLibraryConfiguration.EnableSNMPReports)
+                        trapSender!.SendCrit(msg);
+                });
+
+                LoggerAccessor.RegisterPostLogAction(LogLevel.Critical, (msg, args) =>
+                {
+                    if (NetworkLibraryConfiguration.EnableSNMPReports)
+                        trapSender!.SendCrit(msg);
+                });
+#if DEBUG
+                LoggerAccessor.RegisterPostLogAction(LogLevel.Debug, (msg, args) =>
+                {
+                    if (NetworkLibraryConfiguration.EnableSNMPReports)
+                        trapSender!.SendInfo(msg);
+                });
+#endif
+            }
+        }
+
         MultiSpyServerConfiguration.RefreshVariables(configPath);
 
         // we need to safely dispose of the database when the application closes

@@ -2,7 +2,9 @@ using NetworkLibrary.HTTP;
 using System.Collections.Generic;
 using System.Net;
 using WebAPIService.THQ;
+using WebAPIService.RCHOME;
 using WatsonWebserver.Core;
+using WebAPIService.HOMELEADERBOARDS;
 
 namespace ApacheNet.RouteHandlers
 {
@@ -106,6 +108,50 @@ namespace ApacheNet.RouteHandlers
                                 ctx.Response.StatusCode = (int)HttpStatusCode.OK;
                                 ctx.Response.ContentType = "text/xml";
                                 return ctx.Response.Send(UFCResult).Result;
+                            }
+
+                            ctx.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
+                            return ctx.Response.Send().Result;
+                        }
+                        return false;
+                     }
+                },
+                new() {
+                    Name = "Home Firing Range leaderboard system",
+                    UrlRegex = "/rchome/leaderboard.py/",
+                    Method = "POST",
+                    Host = null,
+                    Callable = (HttpContextBase ctx) => {
+                        if (ApacheNetServerConfiguration.EnableBuiltInPlugins)
+                        {
+                            string? RCHOMEResult = new RCHOMEClass(ctx.Request.Method.ToString(), ctx.Request.Url.RawWithoutQuery, ApacheNetServerConfiguration.APIStaticFolder).ProcessRequest(ctx.Request.DataAsBytes, ctx.Request.ContentType);
+                            if (!string.IsNullOrEmpty(RCHOMEResult))
+                            {
+                                ctx.Response.StatusCode = (int)HttpStatusCode.OK;
+                                ctx.Response.ContentType = "text/xml";
+                                return ctx.Response.Send(RCHOMEResult).Result;
+                            }
+
+                            ctx.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
+                            return ctx.Response.Send().Result;
+                        }
+                        return false;
+                     }
+                },
+                new() {
+                    Name = "Home Athletic games leaderboard system",
+                    UrlRegex = "/entryBare.php",
+                    Method = "POST",
+                    Host = "homeleaderboards.software.eu.playstation.com",
+                    Callable = (HttpContextBase ctx) => {
+                        if (ApacheNetServerConfiguration.EnableBuiltInPlugins)
+                        {
+                            string? EntryBareResult = HOMELEADERBOARDSClass.ProcessEntryBare(ctx.Request.DataAsBytes, HTTPProcessor.ExtractBoundary(ctx.Request.ContentType), ApacheNetServerConfiguration.APIStaticFolder);
+                            if (!string.IsNullOrEmpty(EntryBareResult))
+                            {
+                                ctx.Response.StatusCode = (int)HttpStatusCode.OK;
+                                ctx.Response.ContentType = "text/xml";
+                                return ctx.Response.Send(EntryBareResult).Result;
                             }
 
                             ctx.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
