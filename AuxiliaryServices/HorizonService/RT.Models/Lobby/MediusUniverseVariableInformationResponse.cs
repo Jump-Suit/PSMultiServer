@@ -33,7 +33,7 @@ namespace Horizon.RT.Models
         public string SvoURL; // UNIVERSE_SVO_URL_MAXLEN
         public bool EndOfList;
 
-        public List<int> approvedList = new List<int>() { 10421, 20043, 20244, 20043, 20464, 21093, 21094, 21614, 21624, 21834, 20371, 20374, 21324, 21514, 21784, 22073, 20464, 22500, 22920, 22924, 22930 };
+        public List<int> approvedList = new List<int>() { 10421, 20043, 20244, 20043, 20464, 21093, 21094, 21614, 21464, 21624, 21834, 20371, 20374, 21324, 21514, 21784, 22073, 20464, 22500, 22920, 22924, 22930 };
 
         public override void Deserialize(MessageReader reader)
         {

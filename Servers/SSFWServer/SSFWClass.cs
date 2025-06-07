@@ -477,8 +477,8 @@ namespace SSFWServer
                                         rewardSvc.HandleRewardServiceTrunksEmergencyPOST(postbuffer, directoryPath, absolutepath);
                                         Response.MakeOkResponse();
                                     }
-                                    else if (absolutepath.Contains($"/RewardsService/pmcards/")
-                                        || absolutepath.Contains($"/RewardsService/p4t-cprod/")
+                                    else if (absolutepath.Contains($"/RewardsService/pm_{env}_inv/")
+                                        || absolutepath.Contains($"/RewardsService/p4t-{env}/")
                                         && IsSSFWRegistered(sessionid))
                                         Response.MakeGetResponse(rewardSvc.HandleRewardServiceInvPOST(postbuffer, directoryPath, filePath, absolutepath), "application/json");
                                     #endregion

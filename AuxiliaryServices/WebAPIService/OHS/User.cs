@@ -507,6 +507,10 @@ namespace WebAPIService.OHS
                                 {
                                     switch (ohsKey)
                                     {
+                                        case "torchLevel":
+                                            if (directorypath.Contains("uncharted2_torchgame"))
+                                                output = "{ [\"torchLevel\"] = 1 }";
+                                            break;
                                         case "last_logon":
                                             if (directorypath.Contains("sodium_blimp"))
                                                 output = "\"" + DateTimeUtils.GetCurrentUnixTimestampAsString() + "\"";
