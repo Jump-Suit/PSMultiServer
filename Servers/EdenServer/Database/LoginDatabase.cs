@@ -87,6 +87,17 @@ namespace EdenServer.Database
                     }
                     else
                     {
+                        if (!ColumnExists(_instance._db, "users", "teamid"))
+                        {
+                            LoggerAccessor.LogWarn("[LoginDatabase] - Migrating users table: adding teamid column");
+
+                            using (var cmd = new SQLiteCommand(
+                                "ALTER TABLE users ADD COLUMN teamid INTEGER NOT NULL DEFAULT 0;", _instance._db))
+                                cmd.ExecuteNonQuery();
+
+                            LoggerAccessor.LogInfo("[LoginDatabase] - Migration completed: teamid added");
+                        }
+
                         LoggerAccessor.LogInfo("[LoginDatabase] - Using " + databasePath);
                         _instance.PrepareStatements();
                         return;
@@ -97,6 +108,20 @@ namespace EdenServer.Database
             LoggerAccessor.LogError("[LoginDatabase] - Error creating database");
             _instance.Dispose();
             _instance = null;
+        }
+
+        private static bool ColumnExists(SQLiteConnection db, string tableName, string columnName)
+        {
+            using (var cmd = new SQLiteCommand($"PRAGMA table_info({tableName});", db))
+            using (var reader = cmd.ExecuteReader())
+            {
+                while (reader.Read())
+                {
+                    if (string.Equals(reader["name"].ToString(), columnName, StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
+            }
+            return false;
         }
 
         private void PrepareStatements()
