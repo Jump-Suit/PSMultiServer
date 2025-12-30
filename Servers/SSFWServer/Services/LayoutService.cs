@@ -1,17 +1,16 @@
 using CustomLogger;
 using Newtonsoft.Json.Linq;
 using SSFWServer.Helpers.FileHelper;
+using SSFWServer.Helpers.RegexHelper;
 using System.Text;
-using System.Text.RegularExpressions;
-
 
 namespace SSFWServer.Services
 {
-    public partial class SSFWLayoutService
+    public class LayoutService
     {
         private string? key;
 
-        public SSFWLayoutService(string? key)
+        public LayoutService(string? key)
         {
             this.key = key;
         }
@@ -46,7 +45,7 @@ namespace SSFWServer.Services
                             }
                             else
                             {
-                                string scenename = scenemap.FirstOrDefault(x => x.Value == SSFWMisc.ExtractPortion(kvp.Key, 13, 18)).Key;
+                                string scenename = scenemap.FirstOrDefault(x => x.Value == Program.ExtractPortion(kvp.Key, 13, 18)).Key;
                                 if (!string.IsNullOrEmpty(scenename))
                                 {
                                     if (File.Exists(directorypath + $"/{kvp.Key}.json")) // SceneID now mapped, so SceneID based file has become obsolete.
@@ -71,10 +70,8 @@ namespace SSFWServer.Services
                         {
                             File.WriteAllText(directorypath + "/HarborStudio.json", Encoding.UTF8.GetString(buffer));
                             handled = true;
-                        }
-                        else
-                        {
-                            string scenename = scenemap.FirstOrDefault(x => x.Value == SSFWMisc.ExtractPortion(sceneid, 13, 18)).Key;
+                        } else {
+                            string scenename = scenemap.FirstOrDefault(x => x.Value == Program.ExtractPortion(sceneid, 13, 18)).Key;
                             if (!string.IsNullOrEmpty(scenename))
                             {
                                 if (File.Exists(directorypath + $"/{sceneid}.json")) // SceneID now mapped, so SceneID based file has become obsolete.
@@ -106,13 +103,7 @@ namespace SSFWServer.Services
             if (words.Length > 0)
                 sceneid = words[^1];
 
-#if NET7_0_OR_GREATER
-            Match match = UUIDRegex().Match(sceneid);
-#else
-            Match match = new Regex(@"[0-9a-fA-F]{8}-[0-9a-fA-F]{8}-[0-9a-fA-F]{8}-[0-9a-fA-F]{8}").Match(sceneid);
-#endif
-
-            if (match.Success) // If is UUID Ok.
+            if (GUIDValidator.RegexSceneIdValidMatch(sceneid).Success) // If is UUID Ok.
             {
                 if (File.Exists(SSFWServerConfiguration.ScenelistFile))
                 {
@@ -123,7 +114,7 @@ namespace SSFWServer.Services
                     }
                     else
                     {
-                        string scenename = ScenelistParser.sceneDictionary.FirstOrDefault(x => x.Value == SSFWMisc.ExtractPortion(sceneid, 13, 18)).Key;
+                        string scenename = ScenelistParser.sceneDictionary.FirstOrDefault(x => x.Value == Program.ExtractPortion(sceneid, 13, 18)).Key;
                         if (!string.IsNullOrEmpty(scenename))
                         {
                             string filepath = directorypath + $"/{scenename}.json";
@@ -250,9 +241,5 @@ namespace SSFWServer.Services
             return outputDictionary;
         }
 
-#if NET7_0_OR_GREATER
-        [GeneratedRegex("[0-9a-fA-F]{8}-[0-9a-fA-F]{8}-[0-9a-fA-F]{8}-[0-9a-fA-F]{8}")]
-        private static partial Regex UUIDRegex();
-#endif
     }
 }

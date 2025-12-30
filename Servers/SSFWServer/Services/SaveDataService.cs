@@ -1,11 +1,12 @@
-using CustomLogger;
-using Newtonsoft.Json;
+﻿using CustomLogger;
+using System.Text.Json;
+using System.Text.RegularExpressions;
 
-namespace SSFWServer.SaveDataHelper
+namespace SSFWServer.Services
 {
-    public static class SSFWGetFileList
+    public class SaveDataService
     {
-        public static string? SSFWSaveDataDebugGetFileList(string directoryPath, string? segment)
+        public string? DebugGetFileList(string directoryPath, string? segment)
         {
             try
             {
@@ -14,12 +15,12 @@ namespace SSFWServer.SaveDataHelper
                     List<FileItem>? files = GetFilesInfo(directoryPath + "/" + segment);
 
                     if (files != null)
-                        return JsonConvert.SerializeObject(new FilesContainer() { files = files }, Formatting.Indented);
+                        return JsonSerializer.Serialize(new FilesContainer() { files = files });
                 }
             }
             catch (Exception e)
             {
-                LoggerAccessor.LogError($"[SSFW] - SaveDataDebug GetFileList ERROR: \n{e}");
+                LoggerAccessor.LogError($"[SSFW] - DebugGetFileList ERROR: \n{e}");
             }
 
             return null;

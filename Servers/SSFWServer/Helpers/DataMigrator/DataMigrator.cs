@@ -1,8 +1,8 @@
 using MultiServerLibrary.Extension;
 
-namespace SSFWServer
+namespace SSFWServer.Helpers.DataMigrator
 {
-    public class SSFWDataMigrator
+    public class DataMigrator
     {
         public static void MigrateSSFWData(string ssfwrootDirectory, string oldStr, string? newStr)
         {
