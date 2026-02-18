@@ -67,9 +67,9 @@ namespace Horizon.DME.Models
                 LoggerAccessor.LogError($"[DMEWorld] - Failed to unregister world with id {WorldId}");
         }
 
-        public static World? GetWorldById(int MediusWorldId, int DmeWorldId)
+        public static World? GetWorldByMediusWorldId(int MediusWorldId)
         {
-            return _idToWorld.Values.FirstOrDefault(world => world.MediusWorldId == MediusWorldId && world.WorldId == DmeWorldId);
+            return _idToWorld.Values.FirstOrDefault(world => world.MediusWorldId == MediusWorldId);
         }
 
         private bool TryRegisterNewClientIndex(out int index)

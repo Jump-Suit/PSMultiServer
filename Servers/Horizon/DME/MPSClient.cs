@@ -485,7 +485,7 @@ namespace Horizon.DME
                                     {
                                         MessageID = new MessageId($"{world.MediusWorldId}-{accountId}-{msgId}-{partyType}"),
                                         Confirmation = MGCL_ERROR_CODE.MGCL_SUCCESS,
-                                        MediusWorldId = createGameWithAttributesRequest.WorldID,
+                                        MediusWorldId = gameOrPartyId,
                                     });
                                 }
                             }

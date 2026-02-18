@@ -579,7 +579,7 @@ namespace Horizon.MUM
                     dme.Queue(new MediusServerCreateGameWithAttributesRequest()
                     {
                         MessageID = new MessageId($"{game.MediusWorldId}-{client.AccountId}-{request.MessageID}-{0}"),
-                        WorldID = game.MediusWorldId,
+                        WorldID = game.GameChannel!.Id,
                         Attributes = game.Attributes,
                         ApplicationID = client.ApplicationId,
                         MaxClients = game.MaxPlayers
@@ -662,7 +662,7 @@ namespace Horizon.MUM
                     dme.Queue(new MediusServerCreateGameWithAttributesRequest()
                     {
                         MessageID = new MessageId($"{game.MediusWorldId}-{client.AccountId}-{request.MessageID}-{0}"),
-                        WorldID = game.MediusWorldId,
+                        WorldID = game.GameChannel!.Id,
                         Attributes = game.Attributes,
                         ApplicationID = client.ApplicationId,
                         MaxClients = game.MaxPlayers
@@ -743,18 +743,12 @@ namespace Horizon.MUM
                     await AddGame(game);
 
                     mps.SendServerCreateGameWithAttributesRequestP2P(matchCreateGameRequest.MessageID.ToString(), client.AccountId, game.MediusWorldId, false, game, client);
+
+                    return;
                 }
                 catch (Exception e)
                 {
                     LoggerAccessor.LogError(e);
-
-                    // Failure creating match game for some reason
-                    client.Queue(new MediusMatchCreateGameResponse()
-                    {
-                        MessageID = matchCreateGameRequest.MessageID,
-                        MediusWorldID = -1,
-                        StatusCode = MediusCallbackStatus.MediusMatchGameCreationFailed
-                    });
                 }
             }
             else
@@ -789,25 +783,27 @@ namespace Horizon.MUM
                     dme.Queue(new MediusServerCreateGameWithAttributesRequest()
                     {
                         MessageID = new MessageId($"{game.MediusWorldId}-{client.AccountId}-{matchCreateGameRequest.MessageID}-{0}"),
-                        WorldID = game.MediusWorldId,
+                        WorldID = game.GameChannel!.Id,
                         Attributes = game.Attributes,
                         ApplicationID = client.ApplicationId,
                         MaxClients = game.MaxPlayers
                     });
+
+                    return;
                 }
                 catch (Exception e)
                 {
                     LoggerAccessor.LogError(e);
-
-                    // Failure adding game for some reason
-                    client.Queue(new MediusMatchCreateGameResponse()
-                    {
-                        MessageID = matchCreateGameRequest.MessageID,
-                        MediusWorldID = -1,
-                        StatusCode = MediusCallbackStatus.MediusMatchGameCreationFailed
-                    });
                 }
             }
+
+            // Failure adding game for some reason
+            client.Queue(new MediusMatchCreateGameResponse()
+            {
+                MessageID = matchCreateGameRequest.MessageID,
+                MediusWorldID = -1,
+                StatusCode = MediusCallbackStatus.MediusMatchGameCreationFailed
+            });
         }
         #endregion
 

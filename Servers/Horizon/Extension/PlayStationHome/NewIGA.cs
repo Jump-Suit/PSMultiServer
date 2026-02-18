@@ -12,12 +12,12 @@ namespace Horizon.Extension.Extension.PlayStationHome
         private static readonly byte[] MuteNFreezeCMD = new byte[] { 0x02, 0x0B, 0x00, 0x01, 0x00, 0x10, 0x64, 0x00, 0x00, 0x0c, 0xFF, 0xFF, 0xFF, 0xAB, 0xFF, 0xFF, 0xFF, 0xFF, 0x30, 0x37, 0x02, 0x00 };
         private static readonly byte[] FreezeCMD = new byte[] { 0x02, 0x0B, 0x00, 0x01, 0x00, 0x10, 0x64, 0x00, 0x00, 0x0c, 0xFF, 0xFF, 0xFF, 0xAB, 0xFF, 0xFF, 0xFF, 0xFF, 0x30, 0x37, 0x01, 0x00 };
 
-        public static string KickClient(short DmeId, int WorldId, int DmeWorldId, bool retail)
+        public static string KickClient(short DmeId, int WorldId, bool retail)
         {
             DMEObject? homeDmeServer = retail ? DmeClass.TcpServer.GetServerPerAppId(20374) : DmeClass.TcpServer.GetServerPerAppId(20371);
             if (homeDmeServer != null && homeDmeServer.DmeWorld != null)
             {
-                World? worldToSearchIn = World.GetWorldById(WorldId, DmeWorldId);
+                World? worldToSearchIn = World.GetWorldByMediusWorldId(WorldId);
                 var client = worldToSearchIn?.Clients.FirstOrDefault(c => c.DmeId == DmeId);
                 if (client != null)
                 {
@@ -37,12 +37,12 @@ namespace Horizon.Extension.Extension.PlayStationHome
             return "Home doesn't have any world populated!";
         }
 
-        public static string ReleaseClient(short DmeId, int WorldId, int DmeWorldId, bool retail)
+        public static string ReleaseClient(short DmeId, int WorldId, bool retail)
         {
             DMEObject? homeDmeServer = retail ? DmeClass.TcpServer.GetServerPerAppId(20374) : DmeClass.TcpServer.GetServerPerAppId(20371);
             if (homeDmeServer != null && homeDmeServer.DmeWorld != null)
             {
-                World? worldToSearchIn = World.GetWorldById(WorldId, DmeWorldId);
+                World? worldToSearchIn = World.GetWorldByMediusWorldId(WorldId);
                 var client = worldToSearchIn?.Clients.FirstOrDefault(c => c.DmeId == DmeId);
                 if (client != null)
                 {
@@ -62,12 +62,12 @@ namespace Horizon.Extension.Extension.PlayStationHome
             return "Home doesn't have any world populated!";
         }
 
-        public static string MuteClient(short DmeId, int WorldId, int DmeWorldId, bool retail)
+        public static string MuteClient(short DmeId, int WorldId, bool retail)
         {
             DMEObject? homeDmeServer = retail ? DmeClass.TcpServer.GetServerPerAppId(20374) : DmeClass.TcpServer.GetServerPerAppId(20371);
             if (homeDmeServer != null && homeDmeServer.DmeWorld != null)
             {
-                World? worldToSearchIn = World.GetWorldById(WorldId, DmeWorldId);
+                World? worldToSearchIn = World.GetWorldByMediusWorldId(WorldId);
                 var client = worldToSearchIn?.Clients.FirstOrDefault(c => c.DmeId == DmeId);
                 if (client != null)
                 {
@@ -87,12 +87,12 @@ namespace Horizon.Extension.Extension.PlayStationHome
             return "Home doesn't have any world populated!";
         }
 
-        public static string MuteAndFreezeClient(short DmeId, int WorldId, int DmeWorldId, bool retail)
+        public static string MuteAndFreezeClient(short DmeId, int WorldId, bool retail)
         {
             DMEObject? homeDmeServer = retail ? DmeClass.TcpServer.GetServerPerAppId(20374) : DmeClass.TcpServer.GetServerPerAppId(20371);
             if (homeDmeServer != null && homeDmeServer.DmeWorld != null)
             {
-                World? worldToSearchIn = World.GetWorldById(WorldId, DmeWorldId);
+                World? worldToSearchIn = World.GetWorldByMediusWorldId(WorldId);
                 var client = worldToSearchIn?.Clients.FirstOrDefault(c => c.DmeId == DmeId);
                 if (client != null)
                 {
@@ -112,12 +112,12 @@ namespace Horizon.Extension.Extension.PlayStationHome
             return "Home doesn't have any world populated!";
         }
 
-        public static string FreezeClient(short DmeId, int WorldId, int DmeWorldId, bool retail)
+        public static string FreezeClient(short DmeId, int WorldId, bool retail)
         {
             DMEObject? homeDmeServer = retail ? DmeClass.TcpServer.GetServerPerAppId(20374) : DmeClass.TcpServer.GetServerPerAppId(20371);
             if (homeDmeServer != null && homeDmeServer.DmeWorld != null)
             {
-                World? worldToSearchIn = World.GetWorldById(WorldId, DmeWorldId);
+                World? worldToSearchIn = World.GetWorldByMediusWorldId(WorldId);
                 var client = worldToSearchIn?.Clients.FirstOrDefault(c => c.DmeId == DmeId);
                 if (client != null)
                 {

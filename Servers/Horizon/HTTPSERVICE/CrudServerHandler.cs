@@ -204,8 +204,7 @@ namespace Horizon.HTTPSERVICE
                         || "localhost".Equals(clientip, StringComparison.InvariantCultureIgnoreCase) || MediusClass.Settings.PlaystationHomeUsersServersAccessList.Any(entry => entry.Key.Contains($":{clientip}") && "ADMIN".Equals(entry.Value))))
                         {
                             if (!string.IsNullOrEmpty(Command) && ctx.Request.QuerystringExists("DmeId") && short.TryParse(ctx.Request.RetrieveQueryValue("DmeId"), out short DmeId)
-                             && ctx.Request.QuerystringExists("WorldId") && int.TryParse(ctx.Request.RetrieveQueryValue("WorldId"), out int WorldId)
-                             && ctx.Request.QuerystringExists("DmeWorldId") && int.TryParse(ctx.Request.RetrieveQueryValue("DmeWorldId"), out int DmeWorldId))
+                             && ctx.Request.QuerystringExists("WorldId") && int.TryParse(ctx.Request.RetrieveQueryValue("WorldId"), out int WorldId))
                             {
                                 bool Retail = true;
                                 string result = "Command Unknown!";
@@ -220,19 +219,19 @@ namespace Horizon.HTTPSERVICE
                                 switch (Command)
                                 {
                                     case "Kick":
-                                        result = NewIGA.KickClient(DmeId, WorldId, DmeWorldId, Retail);
+                                        result = NewIGA.KickClient(DmeId, WorldId, Retail);
                                         break;
                                     case "Release":
-                                        result = NewIGA.ReleaseClient(DmeId, WorldId, DmeWorldId, Retail);
+                                        result = NewIGA.ReleaseClient(DmeId, WorldId, Retail);
                                         break;
                                     case "Mute":
-                                        result = NewIGA.MuteClient(DmeId, WorldId, DmeWorldId, Retail);
+                                        result = NewIGA.MuteClient(DmeId, WorldId, Retail);
                                         break;
                                     case "MuteFreeze":
-                                        result = NewIGA.MuteAndFreezeClient(DmeId, WorldId, DmeWorldId, Retail);
+                                        result = NewIGA.MuteAndFreezeClient(DmeId, WorldId, Retail);
                                         break;
                                     case "Freeze":
-                                        result = NewIGA.FreezeClient(DmeId, WorldId, DmeWorldId, Retail);
+                                        result = NewIGA.FreezeClient(DmeId, WorldId, Retail);
                                         break;
                                     default:
                                         LoggerAccessor.LogWarn($"[CrudServerHandler] - Unknown Home IGA command: {Command}");
